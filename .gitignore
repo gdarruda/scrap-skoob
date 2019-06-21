@@ -99,3 +99,11 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# IDE
+.vscode/
+.DS_Store
+
+# Executions
+crawls/
+output/

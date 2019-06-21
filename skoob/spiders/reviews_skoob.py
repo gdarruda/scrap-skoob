@@ -6,8 +6,7 @@ class ReviewsSkoob(scrapy.Spider):
 
     def start_requests(self):
 
-        # Total of books is 456921
-        urls = ["https://www.skoob.com.br/livro/resenhas/" + str(i) for i in range(1, 10000)]
+        urls = ["https://www.skoob.com.br/livro/resenhas/" + str(i) for i in range(1, 456920)]
 
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
@@ -26,7 +25,10 @@ class ReviewsSkoob(scrapy.Spider):
         author = book_info.xpath(".//a[contains(@href, '/autor/')]/text()").extract_first()
         book_name = book_info.xpath(".//strong[@class='sidebar-titulo']/text()").extract_first()
 
-        reviews = []
+        if 'reviews' in response.meta:
+            reviews = response.meta['reviews']
+        else:
+            reviews = []
 
         for review in response.xpath("//div[re:test(@id, 'resenha[0-9]+')]"):
 
@@ -35,22 +37,25 @@ class ReviewsSkoob(scrapy.Spider):
             rating = review.xpath(".//star-rating/@rate").extract_first()
             text = self.get_review(response.xpath(f".//div[@id='resenhac{review_id[7:]}']/text()").extract())
 
-            reviews.append({'review_id': review_id,
-                            'user_id': user_id,
-                            'rating': int(rating),
-                            'text': text})
-
             self.log(f"Review {review_id} processed for {book_name}")
 
-        if len(reviews) > 0:
-            yield {
-                'author': author,
-                'book_name': book_name,
-                'reviews': reviews
-            }
+            reviews.append({'review_id': review_id,
+                   'user_id': user_id,
+                   'rating': int(rating),
+                   'text': text})
 
-        next_page = response.css('div.proximo')
+        reviews_page = {
+            'author': author,
+            'book_name': book_name,
+            'reviews': reviews
+        }
+
+        next_page = response.css('div.proximo').xpath('.//a/@href').extract_first()
 
         if next_page is not None:
-            relative_url = next_page.xpath('.//a/@href').extract_first()
-            yield response.follow(relative_url, callback=self.parse)
+            request = response.follow(next_page, callback=self.parse)
+            request.meta['reviews'] = reviews
+            yield request
+        elif len(reviews) > 0:
+            self.log(f"Saving {len(reviews)} reviews for book {book_name}")
+            yield reviews_page
